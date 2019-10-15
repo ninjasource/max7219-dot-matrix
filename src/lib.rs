@@ -84,18 +84,8 @@ impl<DATA, CS, CLK, PinError> MAX7219<DATA, CS, CLK>
      pub fn write_str(&mut self, s : &str) {
          for (string_index, font_index) in s.as_bytes().iter().enumerate() {
              let buffer = CP437FONT[*font_index as usize];
-             let mut rotated: [u8; 8] = [0; 8];
 
              for (i, line) in buffer.iter().enumerate() {
-                 for j in 0..8 {
-                     if is_bit_set(*line, j) {
-                         let mask: u8 = 1 << i as u8;
-                         rotated[7 - (j as usize)] = rotated[7 - (j as usize)] | mask;
-                     }
-                 }
-             }
-
-             for (i, line) in rotated.iter().enumerate() {
                  let register = (i + 1) as u8;
                  self.write_raw(string_index as u8, register, *line);
              }
@@ -114,6 +104,8 @@ impl<DATA, CS, CLK, PinError> MAX7219<DATA, CS, CLK>
             self.clk.set_low();
         }
     }
+
+
 }
 
 fn is_bit_set (byte : u8, n : u8) -> bool {
@@ -122,4 +114,19 @@ fn is_bit_set (byte : u8, n : u8) -> bool {
     } else {
         false
     }
+}
+
+fn rotate_90_clockwise (buffer: [u8; 8]) -> [u8; 8]{
+    let mut rotated: [u8; 8] = [0; 8];
+
+    for (i, line) in buffer.iter().enumerate() {
+        for j in 0..8 {
+            if is_bit_set(*line, j) {
+                let mask: u8 = 1 << i as u8;
+                rotated[7 - (j as usize)] = rotated[7 - (j as usize)] | mask;
+            }
+        }
+    }
+
+    rotated
 }
