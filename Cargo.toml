@@ -1,0 +1,13 @@
+[package]
+name = "max7219"
+version = "0.1.0"
+authors = ["David Haig <david@ninjasource.com>"]
+edition = "2018"
+repository = "https://github.com/ninjasource/max7219-dot-matrix.git"
+license = "MIT"
+categories = ["embedded", "no-std"]
+keywords = [ "max7219", "led-matrix"]
+description = "Rust driver for the max7219 connected to a 8x8 dot matrix led chip"
+
+[dependencies]
+embedded-hal = "0.2"
