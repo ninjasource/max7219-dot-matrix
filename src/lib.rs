@@ -51,7 +51,7 @@ impl<DATA, CS, CLK, PinError> MAX7219<DATA, CS, CLK>
         self.write_raw_all(command as u8, data);
     }
 
-    pub fn write_raw(&mut self, position: u32, register: u8, data: u8) {
+    pub fn write_raw(&mut self, position: u8, register: u8, data: u8) {
         self.cs.set_low();
 
         // write blank cells before text
@@ -82,9 +82,8 @@ impl<DATA, CS, CLK, PinError> MAX7219<DATA, CS, CLK>
     }
 
      pub fn write_str(&mut self, s : &str) {
-         for (position, index) in s.as_bytes().iter().enumerate() {
-             //let index = b as usize;//s.as_bytes()[0] as usize;
-             let buffer = CP437FONT[*index as usize];
+         for (string_index, font_index) in s.as_bytes().iter().enumerate() {
+             let buffer = CP437FONT[*font_index as usize];
              let mut rotated: [u8; 8] = [0; 8];
 
              for (i, line) in buffer.iter().enumerate() {
@@ -98,7 +97,7 @@ impl<DATA, CS, CLK, PinError> MAX7219<DATA, CS, CLK>
 
              for (i, line) in rotated.iter().enumerate() {
                  let register = (i + 1) as u8;
-                 self.write_raw(position as u8, register, *line);
+                 self.write_raw(string_index as u8, register, *line);
              }
          }
     }
