@@ -25,23 +25,28 @@ pub enum Command {
     Intensity = 0x0A,
     ScanLimit = 0x0B,
     OnOff = 0x0C,
-    DisplayTest = 0x0F
+    DisplayTest = 0x0F,
 }
 
 pub struct MAX7219<DATA, CS, CLK> {
     data: DATA,
     cs: CS,
     clk: CLK,
-    num_devices: u8
+    num_devices: u8,
 }
 
 impl<DATA, CS, CLK, PinError> MAX7219<DATA, CS, CLK>
-    where DATA: OutputPin<Error = PinError>, CS: OutputPin<Error = PinError>, CLK: OutputPin<Error = PinError> {
-
+where
+    DATA: OutputPin<Error = PinError>,
+    CS: OutputPin<Error = PinError>,
+    CLK: OutputPin<Error = PinError>,
+{
     pub fn new(data: DATA, cs: CS, clk: CLK, num_devices: u8) -> Self {
-
         let mut max7219 = MAX7219 {
-            data, cs, clk, num_devices
+            data,
+            cs,
+            clk,
+            num_devices,
         };
 
         max7219
@@ -51,10 +56,10 @@ impl<DATA, CS, CLK, PinError> MAX7219<DATA, CS, CLK>
         self.write_raw_all(command as u8, data);
     }
 
-    pub fn write_raw(&mut self, position: u8, register: u8, data: u8) {
+    fn write_raw(&mut self, position: u8, register: u8, data: u8) {
         self.cs.set_low();
 
-        // write blank cells before text
+        // write blank cells after text (yes, after)
         for _ in position..self.num_devices - 1 {
             self.shift_out(0);
             self.shift_out(0);
@@ -63,7 +68,7 @@ impl<DATA, CS, CLK, PinError> MAX7219<DATA, CS, CLK>
         self.shift_out(register);
         self.shift_out(data);
 
-        // write blank cells after text
+        // write blank cells before text
         for _ in 0..position {
             self.shift_out(0);
             self.shift_out(0);
@@ -81,15 +86,15 @@ impl<DATA, CS, CLK, PinError> MAX7219<DATA, CS, CLK>
         self.cs.set_high();
     }
 
-     pub fn write_str(&mut self, s : &str) {
-         for (string_index, font_index) in s.as_bytes().iter().enumerate() {
-             let buffer = CP437FONT[*font_index as usize];
+    pub fn write_str(&mut self, s: &str) {
+        for (string_index, font_index) in s.as_bytes().iter().enumerate() {
+            let buffer = CP437FONT[*font_index as usize];
 
-             for (i, line) in buffer.iter().enumerate() {
-                 let register = (i + 1) as u8;
-                 self.write_raw(string_index as u8, register, *line);
-             }
-         }
+            for (i, line) in buffer.iter().enumerate() {
+                let register = (i + 1) as u8;
+                self.write_raw(string_index as u8, register, *line);
+            }
+        }
     }
 
     fn shift_out(&mut self, value: u8) {
@@ -104,29 +109,4 @@ impl<DATA, CS, CLK, PinError> MAX7219<DATA, CS, CLK>
             self.clk.set_low();
         }
     }
-
-
-}
-
-fn is_bit_set (byte : u8, n : u8) -> bool {
-    if n < 8 {
-        byte & (1 << n) != 0
-    } else {
-        false
-    }
-}
-
-fn rotate_90_clockwise (buffer: [u8; 8]) -> [u8; 8]{
-    let mut rotated: [u8; 8] = [0; 8];
-
-    for (i, line) in buffer.iter().enumerate() {
-        for j in 0..8 {
-            if is_bit_set(*line, j) {
-                let mask: u8 = 1 << i as u8;
-                rotated[7 - (j as usize)] = rotated[7 - (j as usize)] | mask;
-            }
-        }
-    }
-
-    rotated
 }
