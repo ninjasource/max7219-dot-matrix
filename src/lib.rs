@@ -45,6 +45,7 @@ where
         MAX7219 { cs, num_devices }
     }
 
+    // write command to all chips
     pub fn write_command_all<E>(
         &mut self,
         spi: &mut FullDuplex<u8, Error = E>,
@@ -54,6 +55,7 @@ where
         self.write_raw_all(spi, command as u8, data);
     }
 
+    // write raw bytes to all chips
     pub fn write_raw_all<E>(
         &mut self,
         spi: &mut FullDuplex<u8, Error = E>,
@@ -68,11 +70,12 @@ where
         self.cs.set_high();
     }
 
+    // write a single byte to a chip a certain position where zero is the first chip
     // this supports daisy chaining multiple chips together.
     fn write_raw_spi<E>(
         &mut self,
         spi: &mut FullDuplex<u8, Error = E>,
-        position: u8,
+        position: usize,
         register: u8,
         data: u8,
     ) {
@@ -97,17 +100,25 @@ where
         self.cs.set_high();
     }
 
+    // use this function to write a string to the led display starting at position zero
     pub fn write_str<E>(&mut self, spi: &mut FullDuplex<u8, Error = E>, s: &str) {
         for (string_index, font_index) in s.as_bytes().iter().enumerate() {
+
+            // get a single character bitmap (8x8) from the font array
             let buffer = CP437FONT[*font_index as usize];
 
+            // write each line of the font to a corresponding register on the max7219
+            // at the position offset specified
             for (i, line) in buffer.iter().enumerate() {
                 let register = (i + 1) as u8;
-                self.write_raw_spi(spi, string_index as u8, register, *line);
+                self.write_raw_spi(spi, string_index, register, *line);
             }
         }
     }
 
+    // use this nightmare function to text to the led display at an arbitrary position.
+    // primarily used for scrolling text
+    // x is the pixel position in the horizontal direction and can be negative
     pub fn write_str_at_pos<E>(&mut self, spi: &mut FullDuplex<u8, Error = E>, s: &str, x: i32) {
         let string = s.as_bytes();
         let abs_x = if x < 0 { -x } else { x };
