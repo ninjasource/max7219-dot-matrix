@@ -190,6 +190,7 @@ where
     }
 
     pub fn write_str_spi_pos1<E>(&mut self, spi: &mut FullDuplex<u8, Error = E>, s: &str, x: i32) {
+     //   self.write_command_all(spi, Command::OnOff, 0);
 
         let string = s.as_bytes();
 
@@ -230,7 +231,7 @@ where
                 for i in 0..8 {
                     let register = (i + 1) as u8;
 
-                    let val = if x == 0 {
+                    let val = if shift_by_bits == 0 {
                         middle[i]
                     } else if x < 0 {
                         // shift digit left
@@ -246,8 +247,9 @@ where
             }
         }
 
+
         // add the remainder of the last character onto the end
-        if x >= 0 {
+        if x >= 0 && shift_by_bits != 0 {
             let string_index = string.len() - 1;
             let position = string_index as i32 + start_string_index + 1;
             if position >= 0 {
@@ -259,6 +261,7 @@ where
                 }
             }
         }
+
     }
 
     /*
