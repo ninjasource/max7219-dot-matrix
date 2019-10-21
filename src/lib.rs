@@ -34,14 +34,14 @@ pub enum Command {
 
 pub struct MAX7219<'a, CS> {
     cs: &'a mut CS,
-    num_devices: u8,
+    num_devices: usize,
 }
 
 impl<'a, CS, PinError> MAX7219<'a, CS>
 where
     CS: OutputPin<Error = PinError>,
 {
-    pub fn new(cs: &'a mut CS, num_devices: u8) -> Self {
+    pub fn new(cs: &'a mut CS, num_devices: usize) -> Self {
         MAX7219 { cs, num_devices }
     }
 
@@ -153,7 +153,7 @@ where
                         middle[i] << shift_by_bits ^ left[i] >> (8 - shift_by_bits)
                     };
 
-                    self.write_raw_spi(spi, position as u8, register, val);
+                    self.write_raw_spi(spi, position as usize, register, val);
                 }
             }
         }
@@ -167,7 +167,7 @@ where
                 for i in 0..8 {
                     let register = (i + 1) as u8;
                     let val = middle[i] >> (8 - shift_by_bits);
-                    self.write_raw_spi(spi, position as u8, register, val);
+                    self.write_raw_spi(spi, position as usize, register, val);
                 }
             }
         }
