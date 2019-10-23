@@ -55,7 +55,19 @@ where
         self.write_raw_all(spi, command as u8, data);
     }
 
-    // write raw bytes to all chips
+    /// clear the display
+    pub fn clear_all<E>(&mut self, spi: &mut FullDuplex<u8, Error = E>) {
+        for register in 1..9 {
+            self.cs.set_low();
+            for _ in 0..self.num_devices {
+                self.shift_out(spi, register);
+                self.shift_out(spi, 0);
+            }
+            self.cs.set_high();
+        }
+    }
+
+    // write the same raw byte to all chips
     pub fn write_raw_all<E>(
         &mut self,
         spi: &mut FullDuplex<u8, Error = E>,
@@ -70,9 +82,34 @@ where
         self.cs.set_high();
     }
 
+    /// payload should have num_devices number of bytes in it
+    /// line_index should be between 0 and 7 (bottom to top if the led serial number is facing up)
+    pub fn write_line_raw<E>(
+        &mut self,
+        spi: &mut FullDuplex<u8, Error = E>,
+        line_index: u8,
+        payload: &[u8],
+    ) {
+        if line_index >= 0 && line_index < 8 && payload.len() == self.num_devices {
+            self.cs.set_low();
+            let register = line_index + 1;
+            for data in payload {
+                self.shift_out(spi, register);
+                self.shift_out(spi, *data);
+            }
+            self.cs.set_high();
+        }
+    }
+
+    // write raw bytes to all chips
+    fn push_raw<E>(&mut self, spi: &mut FullDuplex<u8, Error = E>, register: u8, data: u8) {
+        self.shift_out(spi, register);
+        self.shift_out(spi, data);
+    }
+
     // write a single byte to a chip a certain position where zero is the first chip
     // this supports daisy chaining multiple chips together.
-    fn write_raw_spi<E>(
+    fn write_raw<E>(
         &mut self,
         spi: &mut FullDuplex<u8, Error = E>,
         position: usize,
@@ -100,76 +137,86 @@ where
         self.cs.set_high();
     }
 
-    // use this function to write a string to the led display starting at position zero
-    pub fn write_str<E>(&mut self, spi: &mut FullDuplex<u8, Error = E>, s: &str) {
-        for (string_index, font_index) in s.as_bytes().iter().enumerate() {
+    fn get_byte_at(
+        &mut self,
+        string: &[u8],
+        string_index: usize,
+        line_index: usize,
+        shift_by_num_bits: i8,
+    ) -> u8 {
+        let left_index = string_index as i32 - 1;
+        let mid_index = string_index;
+        let right_index = string_index + 1;
+        let len = string.len() as i32;
 
-            // get a single character bitmap (8x8) from the font array
-            let buffer = CP437FONT[*font_index as usize];
+        let left = if is_in_range(len, left_index) {
+            CP437FONT[string[left_index as usize] as usize]
+        } else {
+            CP437FONT[0]
+        };
+        let middle = if is_in_range(len, mid_index as i32) {
+            CP437FONT[string[mid_index] as usize]
+        } else {
+            CP437FONT[0]
+        };
+        let right = if is_in_range(len, right_index as i32) {
+            CP437FONT[string[right_index] as usize]
+        } else {
+            CP437FONT[0]
+        };
 
-            // write each line of the font to a corresponding register on the max7219
-            // at the position offset specified
-            for (i, line) in buffer.iter().enumerate() {
-                let register = (i + 1) as u8;
-                self.write_raw_spi(spi, string_index, register, *line);
-            }
-        }
+        let val = if shift_by_num_bits == 0 {
+            middle[line_index]
+        } else if shift_by_num_bits < 0 {
+            // shift digit left
+            let shift_by_num_bits = -shift_by_num_bits as u8;
+            middle[line_index] >> shift_by_num_bits ^ right[line_index] << (8 - shift_by_num_bits)
+        } else {
+            // shift digit right
+            let shift_by_num_bits = shift_by_num_bits as u8;
+            middle[line_index] << shift_by_num_bits ^ left[line_index] >> (8 - shift_by_num_bits)
+        };
+
+        val
     }
 
     // use this nightmare function to text to the led display at an arbitrary position.
     // primarily used for scrolling text
     // x is the pixel position in the horizontal direction and can be negative
-    pub fn write_str_at_pos<E>(&mut self, spi: &mut FullDuplex<u8, Error = E>, s: &str, x: i32) {
+    pub fn write_str_at_pos<E>(
+        &mut self,
+        spi: &mut FullDuplex<u8, Error = E>,
+        s: &str,
+        x_pos: i32,
+    ) {
         let string = s.as_bytes();
-        let abs_x = if x < 0 { -x } else { x };
-        let shift_by_bits = (abs_x % 8) as u8;
-        let start_string_index = x / 8;
+        let shift_by_bits = (x_pos % 8) as i8;
+        let start_string_index = x_pos / 8;
 
-        for (string_index, font_index) in string.iter().enumerate() {
-            let position = string_index as i32 + start_string_index;
-            if position >= 0 {
-                let left = if string_index > 0 {
-                    CP437FONT[string[string_index - 1] as usize]
+        for line_index in 0..8 {
+            self.cs.set_low();
+
+            // write one line
+            for chip_index in 0..self.num_devices {
+                // write the string backwards because we push bytes onto the bus so the last
+                // character appears first
+                let string_index =
+                    self.num_devices as i32 - chip_index as i32 - 1 - start_string_index as i32;
+                let register = line_index as u8 + 1;
+
+                // bit of a strange range check here but we need to draw the remainder of the last character
+                if string_index >= 0 && string_index <= string.len() as i32 {
+                    // we may need to draw a single character over two chips so we need to do some bit shifting
+                    let val =
+                        self.get_byte_at(string, string_index as usize, line_index, shift_by_bits);
+                    self.push_raw(spi, register, val);
                 } else {
-                    CP437FONT[0]
-                };
-                let middle = CP437FONT[string[string_index] as usize];
-                let right = if string_index < string.len() - 1 {
-                    CP437FONT[string[string_index + 1] as usize]
-                } else {
-                    CP437FONT[0]
-                };
-
-                for i in 0..8 {
-                    let register = (i + 1) as u8;
-
-                    let val = if shift_by_bits == 0 {
-                        middle[i]
-                    } else if x < 0 {
-                        // shift digit left
-                        middle[i] >> shift_by_bits ^ right[i] << (8 - shift_by_bits)
-                    } else {
-                        // shift digit right
-                        middle[i] << shift_by_bits ^ left[i] >> (8 - shift_by_bits)
-                    };
-
-                    self.write_raw_spi(spi, position as usize, register, val);
+                    self.push_raw(spi, register, 0);
                 }
             }
-        }
 
-        // add the remainder of the last character onto the end
-        if x >= 0 && shift_by_bits != 0 {
-            let string_index = string.len() - 1;
-            let position = string_index as i32 + start_string_index + 1;
-            if position >= 0 {
-                let middle = CP437FONT[string[string_index] as usize];
-                for i in 0..8 {
-                    let register = (i + 1) as u8;
-                    let val = middle[i] >> (8 - shift_by_bits);
-                    self.write_raw_spi(spi, position as usize, register, val);
-                }
-            }
+            // latch
+            self.cs.set_high();
         }
     }
 
@@ -177,4 +224,8 @@ where
         block!(spi.send(value));
         block!(spi.read());
     }
+}
+
+fn is_in_range(len: i32, i: i32) -> bool {
+    i >= 0 && i < len
 }
