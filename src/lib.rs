@@ -45,6 +45,10 @@ where
         MAX7219 { cs, num_devices }
     }
 
+    pub fn get_num_devices(&mut self) -> usize {
+        self.num_devices
+    }
+
     // write command to all chips
     pub fn write_command_all<E>(
         &mut self,
