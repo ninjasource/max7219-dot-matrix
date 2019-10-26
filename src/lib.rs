@@ -4,7 +4,8 @@
 /// daisy-chained displays. Not to be confused with other rust MAX7219 drivers which are designed for
 /// use with a standard 7 segment LED display.
 /// see http://www.gammon.com.au/forum/?id=11516 a description of this chip and uses
-/// see also https://github.com/nickgammon/MAX7219
+/// see also https://github.com/nickgammon/MAX7219 for a simple c based driver
+/// see https://github.com/ninjasource/led-display-websocket-demo for demo of this driver
 
 extern crate embedded_hal;
 use core::result::Result;
@@ -40,6 +41,7 @@ pub enum Command {
     Digit6 = 0x07,
     Digit7 = 0x08,
     DecodeMode = 0x09,
+    /// Intensity of the light 0-15
     Intensity = 0x0A,
     ScanLimit = 0x0B,
     OnOff = 0x0C,

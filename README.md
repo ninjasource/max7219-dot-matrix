@@ -74,3 +74,5 @@ fn demo_print_string<SpiError, PinError, CS>(
     Ok(())
 }
 ```
+
+See https://github.com/ninjasource/led-display-websocket-demo for a full demo
