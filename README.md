@@ -43,7 +43,7 @@ fn main() -> ! {
         &mut rcc.apb2,
     );
 
-    // max 7219 setup
+    // max 7219 setup for 20 chips
     let mut max7219 = MAX7219::new(&mut cs, 20);
 
     // use the driver with error handling
@@ -69,7 +69,7 @@ fn demo_print_string<SpiError, PinError, CS>(
     max7219.clear_all(spi)?;
     max7219.write_command_all(spi, Command::OnOff, 1)?;
 
-    // write out a string - x_pos can be positive or negative
+    // write out a string at position 0 (position can be negative)
     max7219.write_str_at_pos(spi, "Hello, World!", 0)?;
     Ok(())
 }
