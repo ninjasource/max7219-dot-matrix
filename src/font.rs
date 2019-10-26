@@ -1,10 +1,9 @@
-// Bit patterns for the CP437 font for 8x8 dot matrix
-// which covers all 256 ascii characters.
-// Each array element consists of the 8 bytes used to build up an image
-// NOTE: If you are looking at the chip and the part number is on the top then you are actually
-// looking at the chip upside down and value 1 at row 0 is the led in the bottom left corner.
-// The font below has been rotated 90 degrees from the font in the forum post (linked see lib.rs)
-
+/// Bit patterns for the CP437 font for 8x8 dot matrix
+/// which covers all 256 ascii characters.
+/// Each array element consists of the 8 bytes used to build up an image
+/// NOTE: If you are looking at the chip and the part number is on the top then you are actually
+/// looking at the chip upside down and value 1 at row 0 is the led in the bottom left corner.
+/// The font below has been rotated 90 degrees from the font in the forum post (linked see lib.rs)
 pub const CP437FONT: [[u8; 8]; 256] = [
     [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00], // 0x00
     [0x7E, 0x81, 0x99, 0xBD, 0x81, 0xA5, 0x81, 0x7E], // 0x01

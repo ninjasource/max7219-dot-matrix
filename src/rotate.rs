@@ -6,8 +6,8 @@ fn is_bit_set (byte : u8, n : u8) -> bool {
     }
 }
 
-// rotate an 8x8 matrix by 90 degrees clockwise
-// used in this project for rotating letters in a font file
+/// Rotate an 8x8 matrix by 90 degrees clockwise
+/// used in this project for rotating letters in a font file
 pub fn rotate_90_clockwise (buffer: [u8; 8]) -> [u8; 8]{
     let mut rotated: [u8; 8] = [0; 8];
 

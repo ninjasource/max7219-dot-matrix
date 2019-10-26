@@ -7,13 +7,24 @@
 // see also https://github.com/nickgammon/MAX7219
 
 extern crate embedded_hal;
+use core::result::Result;
 use embedded_hal::digital::v2::OutputPin;
-mod font;
 use embedded_hal::spi::FullDuplex;
+
+mod font;
 use font::*;
 
 #[macro_use(block)]
 extern crate nb;
+
+/// All possible errors in this crate
+#[derive(Debug)]
+pub enum Error<SpiError, PinError1> {
+    /// SPI communication error
+    Spi(SpiError),
+    /// Chip select pin set error
+    Pin(PinError1),
+}
 
 pub enum Command {
     Noop = 0x00,
@@ -45,100 +56,149 @@ where
         MAX7219 { cs, num_devices }
     }
 
+    /// Gets the number of devices you passed in when calling new
     pub fn get_num_devices(&mut self) -> usize {
         self.num_devices
     }
 
-    // write command to all chips
-    pub fn write_command_all<E>(
+    /// Write command to all chips
+    pub fn write_command_all<SpiError>(
         &mut self,
-        spi: &mut FullDuplex<u8, Error = E>,
+        spi: &mut dyn FullDuplex<u8, Error = SpiError>,
         command: Command,
         data: u8,
-    ) {
-        self.write_raw_all(spi, command as u8, data);
+    ) -> Result<(), Error<SpiError, PinError>> {
+        self.write_raw_all(spi, command as u8, data)?;
+        Ok(())
     }
 
-    /// clear the display
-    pub fn clear_all<E>(&mut self, spi: &mut FullDuplex<u8, Error = E>) {
-        for register in 1..9 {
-            self.cs.set_low();
-            for _ in 0..self.num_devices {
-                self.shift_out(spi, register);
-                self.shift_out(spi, 0);
-            }
-            self.cs.set_high();
-        }
-    }
-
-    // write the same raw byte to all chips
-    pub fn write_raw_all<E>(
+    /// Clear the display
+    pub fn clear_all<SpiError>(
         &mut self,
-        spi: &mut FullDuplex<u8, Error = E>,
+        spi: &mut dyn FullDuplex<u8, Error = SpiError>,
+    ) -> Result<(), Error<SpiError, PinError>> {
+        for register in 1..9 {
+            self.cs.set_low().map_err(Error::Pin)?;
+            for _ in 0..self.num_devices {
+                self.shift_out(spi, register)?;
+                self.shift_out(spi, 0)?;
+            }
+            self.cs.set_high().map_err(Error::Pin)?;
+        }
+
+        Ok(())
+    }
+
+    /// Write the same raw byte to all chips
+    pub fn write_raw_all<SpiError>(
+        &mut self,
+        spi: &mut dyn FullDuplex<u8, Error = SpiError>,
         register: u8,
         data: u8,
-    ) {
-        self.cs.set_low();
+    ) -> Result<(), Error<SpiError, PinError>> {
+        self.cs.set_low().map_err(Error::Pin)?;
         for _ in 0..self.num_devices {
-            self.shift_out(spi, register);
-            self.shift_out(spi, data);
+            self.shift_out(spi, register)?;
+            self.shift_out(spi, data)?;
         }
-        self.cs.set_high();
+        self.cs.set_high().map_err(Error::Pin)?;
+        Ok(())
     }
 
-    /// payload should have num_devices number of bytes in it
+    /// Payload should have num_devices number of bytes in it
     /// line_index should be between 0 and 7 (bottom to top if the led serial number is facing up)
-    pub fn write_line_raw<E>(
+    pub fn write_line_raw<SpiError>(
         &mut self,
-        spi: &mut FullDuplex<u8, Error = E>,
+        spi: &mut dyn FullDuplex<u8, Error = SpiError>,
         line_index: u8,
         payload: &[u8],
-    ) {
-        if line_index >= 0 && line_index < 8 && payload.len() == self.num_devices {
-            self.cs.set_low();
+    ) -> Result<(), Error<SpiError, PinError>> {
+        if line_index < 8 && payload.len() == self.num_devices {
+            self.cs.set_low().map_err(Error::Pin)?;
             let register = line_index + 1;
             for data in payload {
-                self.shift_out(spi, register);
-                self.shift_out(spi, *data);
+                self.shift_out(spi, register)?;
+                self.shift_out(spi, *data)?;
             }
-            self.cs.set_high();
+            self.cs.set_high().map_err(Error::Pin)?;
         }
+
+        Ok(())
     }
 
-    // write raw bytes to all chips
-    fn push_raw<E>(&mut self, spi: &mut FullDuplex<u8, Error = E>, register: u8, data: u8) {
-        self.shift_out(spi, register);
-        self.shift_out(spi, data);
-    }
-
-    // write a single byte to a chip a certain position where zero is the first chip
-    // this supports daisy chaining multiple chips together.
-    fn write_raw<E>(
+    /// Write a single byte to a chip a certain position where zero is the first chip
+    /// this supports daisy chaining multiple chips together.
+    /// Note that if you plan to write to all devices then write_line_raw is much faster
+    pub fn write_device_raw<SpiError>(
         &mut self,
-        spi: &mut FullDuplex<u8, Error = E>,
-        position: usize,
+        spi: &mut dyn FullDuplex<u8, Error = SpiError>,
+        device_index: usize,
         register: u8,
         data: u8,
-    ) {
-        self.cs.set_low();
+    ) -> Result<(), Error<SpiError, PinError>> {
+        self.cs.set_low().map_err(Error::Pin)?;
 
         // skip MAX7219 chips after the text (yes, after)
-        for _ in position..self.num_devices - 1 {
-            self.shift_out(spi, 0);
-            self.shift_out(spi, 0);
+        for _ in device_index..self.num_devices - 1 {
+            self.shift_out(spi, 0)?;
+            self.shift_out(spi, 0)?;
         }
 
         // write one line
-        self.shift_out(spi, register);
-        self.shift_out(spi, data);
+        self.shift_out(spi, register)?;
+        self.shift_out(spi, data)?;
 
         // skip MAX7219 chips before text
-        for _ in 0..position {
-            self.shift_out(spi, 0);
-            self.shift_out(spi, 0);
+        for _ in 0..device_index {
+            self.shift_out(spi, 0)?;
+            self.shift_out(spi, 0)?;
         }
 
-        self.cs.set_high();
+        self.cs.set_high().map_err(Error::Pin)?;
+        Ok(())
+    }
+
+    /// Use this nightmare function to text to the led display at an arbitrary position.
+    /// primarily used for scrolling text
+    /// x is the pixel position in the horizontal direction and can be negative
+    pub fn write_str_at_pos<SpiError>(
+        &mut self,
+        spi: &mut dyn FullDuplex<u8, Error = SpiError>,
+        s: &str,
+        x_pos: i32,
+    ) -> Result<(), Error<SpiError, PinError>> {
+        let string = s.as_bytes();
+        let shift_by_bits = (x_pos % 8) as i8;
+        let start_string_index = x_pos / 8;
+
+        for line_index in 0..8 {
+            self.cs.set_low().map_err(Error::Pin)?;
+
+            // write one line
+            for chip_index in 0..self.num_devices {
+                // write the string backwards because we push bytes onto the bus so the last
+                // character appears first
+                let string_index =
+                    self.num_devices as i32 - chip_index as i32 - 1 - start_string_index as i32;
+                let register = line_index as u8 + 1;
+                self.shift_out(spi, register)?;
+
+                // bit of a strange range check here but we need to draw the remainder of the last character
+                if string_index >= 0 && string_index <= string.len() as i32 {
+                    // we may need to draw a single character over two chips so we need to do some bit shifting
+                    let val =
+                        self.get_byte_at(string, string_index as usize, line_index, shift_by_bits);
+                    self.shift_out(spi, val)?;
+                } else {
+                    self.shift_out(spi, 0)?;
+                }
+            }
+
+            // latch
+            self.cs.set_high().map_err(Error::Pin)?;
+        }
+
+        Ok(())
     }
 
     fn get_byte_at(
@@ -184,49 +244,14 @@ where
         val
     }
 
-    // use this nightmare function to text to the led display at an arbitrary position.
-    // primarily used for scrolling text
-    // x is the pixel position in the horizontal direction and can be negative
-    pub fn write_str_at_pos<E>(
+    fn shift_out<SpiError>(
         &mut self,
-        spi: &mut FullDuplex<u8, Error = E>,
-        s: &str,
-        x_pos: i32,
-    ) {
-        let string = s.as_bytes();
-        let shift_by_bits = (x_pos % 8) as i8;
-        let start_string_index = x_pos / 8;
-
-        for line_index in 0..8 {
-            self.cs.set_low();
-
-            // write one line
-            for chip_index in 0..self.num_devices {
-                // write the string backwards because we push bytes onto the bus so the last
-                // character appears first
-                let string_index =
-                    self.num_devices as i32 - chip_index as i32 - 1 - start_string_index as i32;
-                let register = line_index as u8 + 1;
-
-                // bit of a strange range check here but we need to draw the remainder of the last character
-                if string_index >= 0 && string_index <= string.len() as i32 {
-                    // we may need to draw a single character over two chips so we need to do some bit shifting
-                    let val =
-                        self.get_byte_at(string, string_index as usize, line_index, shift_by_bits);
-                    self.push_raw(spi, register, val);
-                } else {
-                    self.push_raw(spi, register, 0);
-                }
-            }
-
-            // latch
-            self.cs.set_high();
-        }
-    }
-
-    fn shift_out<E>(&mut self, spi: &mut FullDuplex<u8, Error = E>, value: u8) {
-        block!(spi.send(value));
-        block!(spi.read());
+        spi: &mut dyn FullDuplex<u8, Error = SpiError>,
+        value: u8,
+    ) -> Result<(), Error<SpiError, PinError>> {
+        block!(spi.send(value)).map_err(Error::Spi)?;
+        block!(spi.read()).map_err(Error::Spi)?;
+        Ok(())
     }
 }
 
