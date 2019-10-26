@@ -51,10 +51,10 @@ pub struct MAX7219<'a, CS> {
     num_devices: usize,
 }
 
+/// we are using v2 flavour of the embedded_hal OutputPin here with its error handling
 impl<'a, CS, PinError> MAX7219<'a, CS>
 where
-    /// we are using v2 flavour of the embedded_hal OutputPin here with its error handling
-    CS: OutputPin<Error = PinError>,
+    CS: OutputPin<Error = PinError>
 {
     pub fn new(cs: &'a mut CS, num_devices: usize) -> Self {
         MAX7219 { cs, num_devices }
