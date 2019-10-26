@@ -1,31 +1,34 @@
 #![no_std]
 
-// This is a driver for the MAX7219 connected to a 8x8 LED dot matrix display. It supports multiple
-// daisy-chained displays. Not to be confused with other rust MAX7219 drivers which are designed for
-// use with a standard 7 segment LED display.
-// see http://www.gammon.com.au/forum/?id=11516 a description of this chip and uses
-// see also https://github.com/nickgammon/MAX7219
+/// This is a driver for the MAX7219 connected to a 8x8 LED dot matrix display. It supports multiple
+/// daisy-chained displays. Not to be confused with other rust MAX7219 drivers which are designed for
+/// use with a standard 7 segment LED display.
+/// see http://www.gammon.com.au/forum/?id=11516 a description of this chip and uses
+/// see also https://github.com/nickgammon/MAX7219
 
 extern crate embedded_hal;
 use core::result::Result;
 use embedded_hal::digital::v2::OutputPin;
 use embedded_hal::spi::FullDuplex;
-
 mod font;
 use font::*;
 
 #[macro_use(block)]
 extern crate nb;
 
-/// All possible errors in this crate
 #[derive(Debug)]
-pub enum Error<SpiError, PinError1> {
+pub enum Error<SpiError, PinError> {
     /// SPI communication error
     Spi(SpiError),
-    /// Chip select pin set error
-    Pin(PinError1),
+    /// CS output pin error
+    Pin(PinError),
+    /// line index should be between 0 and 7
+    InvalidLineIndex,
+    /// payload length should be num_devices
+    InvalidPayloadLength,
 }
 
+/// all the possible commands that can be sent to the max7219
 pub enum Command {
     Noop = 0x00,
     Digit0 = 0x01,
@@ -50,6 +53,7 @@ pub struct MAX7219<'a, CS> {
 
 impl<'a, CS, PinError> MAX7219<'a, CS>
 where
+    /// we are using v2 flavour of the embedded_hal OutputPin here with its error handling
     CS: OutputPin<Error = PinError>,
 {
     pub fn new(cs: &'a mut CS, num_devices: usize) -> Self {
@@ -113,15 +117,21 @@ where
         line_index: u8,
         payload: &[u8],
     ) -> Result<(), Error<SpiError, PinError>> {
-        if line_index < 8 && payload.len() == self.num_devices {
-            self.cs.set_low().map_err(Error::Pin)?;
-            let register = line_index + 1;
-            for data in payload {
-                self.shift_out(spi, register)?;
-                self.shift_out(spi, *data)?;
-            }
-            self.cs.set_high().map_err(Error::Pin)?;
+        if line_index >= 8 {
+            return Err(Error::InvalidLineIndex);
         }
+
+        if payload.len() != self.num_devices {
+            return Err(Error::InvalidPayloadLength);
+        }
+
+        self.cs.set_low().map_err(Error::Pin)?;
+        let register = line_index + 1;
+        for data in payload {
+            self.shift_out(spi, register)?;
+            self.shift_out(spi, *data)?;
+        }
+        self.cs.set_high().map_err(Error::Pin)?;
 
         Ok(())
     }
@@ -201,6 +211,9 @@ where
         Ok(())
     }
 
+    /// gets a byte representing part of a font character shifted by some number of bits
+    /// it is possible to get part of the next or previous character returned because of the
+    /// position shifting
     fn get_byte_at(
         &mut self,
         string: &[u8],
@@ -229,7 +242,7 @@ where
             CP437FONT[0]
         };
 
-        let val = if shift_by_num_bits == 0 {
+        if shift_by_num_bits == 0 {
             middle[line_index]
         } else if shift_by_num_bits < 0 {
             // shift digit left
@@ -239,11 +252,11 @@ where
             // shift digit right
             let shift_by_num_bits = shift_by_num_bits as u8;
             middle[line_index] << shift_by_num_bits ^ left[line_index] >> (8 - shift_by_num_bits)
-        };
-
-        val
+        }
     }
 
+    /// sends a byte of data to the spi bus
+    /// note that we need to call read to clear some read register before we can write again
     fn shift_out<SpiError>(
         &mut self,
         spi: &mut dyn FullDuplex<u8, Error = SpiError>,
