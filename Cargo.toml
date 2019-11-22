@@ -1,5 +1,5 @@
 [package]
-name = "max7219"
+name = "max7219-dot-matrix"
 version = "0.1.0"
 authors = ["David Haig <david@ninjasource.com>"]
 edition = "2018"
