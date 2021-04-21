@@ -6,16 +6,11 @@
 /// see http://www.gammon.com.au/forum/?id=11516 a description of this chip and uses
 /// see also https://github.com/nickgammon/MAX7219 for a simple c based driver
 /// see https://github.com/ninjasource/led-display-websocket-demo for demo of this driver
-
 extern crate embedded_hal;
 use core::result::Result;
-use embedded_hal::digital::v2::OutputPin;
-use embedded_hal::spi::FullDuplex;
+use embedded_hal::{blocking::spi::Transfer, digital::v2::OutputPin};
 mod font;
 use font::*;
-
-#[macro_use(block)]
-extern crate nb;
 
 #[derive(Debug)]
 pub enum Error<SpiError, PinError> {
@@ -56,7 +51,7 @@ pub struct MAX7219<'a, CS> {
 /// we are using v2 flavour of the embedded_hal OutputPin here with its error handling
 impl<'a, CS, PinError> MAX7219<'a, CS>
 where
-    CS: OutputPin<Error = PinError>
+    CS: OutputPin<Error = PinError>,
 {
     pub fn new(cs: &'a mut CS, num_devices: usize) -> Self {
         MAX7219 { cs, num_devices }
@@ -70,7 +65,7 @@ where
     /// Write command to all chips
     pub fn write_command_all<SpiError>(
         &mut self,
-        spi: &mut dyn FullDuplex<u8, Error = SpiError>,
+        spi: &mut dyn Transfer<u8, Error = SpiError>,
         command: Command,
         data: u8,
     ) -> Result<(), Error<SpiError, PinError>> {
@@ -81,7 +76,7 @@ where
     /// Clear the display
     pub fn clear_all<SpiError>(
         &mut self,
-        spi: &mut dyn FullDuplex<u8, Error = SpiError>,
+        spi: &mut dyn Transfer<u8, Error = SpiError>,
     ) -> Result<(), Error<SpiError, PinError>> {
         for register in 1..9 {
             self.cs.set_low().map_err(Error::Pin)?;
@@ -98,7 +93,7 @@ where
     /// Write the same raw byte to all chips
     pub fn write_raw_all<SpiError>(
         &mut self,
-        spi: &mut dyn FullDuplex<u8, Error = SpiError>,
+        spi: &mut dyn Transfer<u8, Error = SpiError>,
         register: u8,
         data: u8,
     ) -> Result<(), Error<SpiError, PinError>> {
@@ -115,7 +110,7 @@ where
     /// line_index should be between 0 and 7 (bottom to top if the led serial number is facing up)
     pub fn write_line_raw<SpiError>(
         &mut self,
-        spi: &mut dyn FullDuplex<u8, Error = SpiError>,
+        spi: &mut dyn Transfer<u8, Error = SpiError>,
         line_index: u8,
         payload: &[u8],
     ) -> Result<(), Error<SpiError, PinError>> {
@@ -143,7 +138,7 @@ where
     /// Note that if you plan to write to all devices then write_line_raw is much faster
     pub fn write_device_raw<SpiError>(
         &mut self,
-        spi: &mut dyn FullDuplex<u8, Error = SpiError>,
+        spi: &mut dyn Transfer<u8, Error = SpiError>,
         device_index: usize,
         register: u8,
         data: u8,
@@ -175,7 +170,7 @@ where
     /// x is the pixel position in the horizontal direction and can be negative
     pub fn write_str_at_pos<SpiError>(
         &mut self,
-        spi: &mut dyn FullDuplex<u8, Error = SpiError>,
+        spi: &mut dyn Transfer<u8, Error = SpiError>,
         s: &str,
         x_pos: i32,
     ) -> Result<(), Error<SpiError, PinError>> {
@@ -261,11 +256,10 @@ where
     /// note that we need to call read to clear some read register before we can write again
     fn shift_out<SpiError>(
         &mut self,
-        spi: &mut dyn FullDuplex<u8, Error = SpiError>,
+        spi: &mut dyn Transfer<u8, Error = SpiError>,
         value: u8,
     ) -> Result<(), Error<SpiError, PinError>> {
-        block!(spi.send(value)).map_err(Error::Spi)?;
-        block!(spi.read()).map_err(Error::Spi)?;
+        spi.transfer(&mut [value]).map_err(|e| Error::Spi(e))?;
         Ok(())
     }
 }
